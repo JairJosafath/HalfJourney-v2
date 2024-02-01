@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  HalfJourney-sam
+
+  SAM Template for HalfJourney-sam request-handler
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+# Globals can be overridden by specific functions
+Globals:
+  Function:
+    LoggingConfig:
+      LogFormat: JSON # JSON can be easily used with other services
+
+Resources:
+  HalfJourneyStateMachine:
+    Type: AWS::Serverless::StateMachine # More info about State Machine Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-statemachine.html
+    Properties:
+      DefinitionUri: statemachine/request_flow.asl.json
+      DefinitionSubstitutions:
+        HalfJourneyTableName: !Ref HalfJourneyTable
+        TitanModelArn: "{{resolve:ssm:/HalfJourney/TitanModelArn:1}}"
+        API-ig-Endpoint: "{{resolve:ssm:/HalfJourney/API-ig-Endpoint:1}}"
+      Policies: # Find out more about SAM policy templates: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-policy-templates.html
+        - DynamoDBWritePolicy:
+            TableName: !Ref HalfJourneyTable
+        - Statement:
+            Effect: Allow
+            Action: bedrock:InvokeModel
+            Resource: "*"
+        
+
+  VerifyDiscordFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html
+    Properties:
+      CodeUri: functions/dist/
+      Handler: index.lambdaHandler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      Events:
+        HalfJourneyApi:
+          Type: Api
+          Properties:
+            Path: /
+            Method: post
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref HalfJourneyStateMachine
+          PUBLIC_KEY: "{{resolve:ssm:/Discord/PUBLIC_KEY:1}}"
+          APPLICATION_ID: "{{resolve:ssm:/Discord/APPLICATION_ID:1}}"
+      
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action: states:StartExecution
+            Resource: !Ref HalfJourneyStateMachine
+
+  HalfJourneyTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: interactionId
+          AttributeType: S
+      KeySchema: 
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: interactionId
+          KeyType: RANGE
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/resources.html
+  HalfJourneyApi:
+    Description: "API Gateway endpoint URL for Prod stage for HalfJourneyApi"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+

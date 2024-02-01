@@ -1,0 +1,33 @@
+{
+  "name": "halfjourneyv2",
+  "version": "2.0.0",
+  "description": "",
+  "scripts": {
+    "build:rh": "sam build --template-file request-handler/template.yaml --build-dir request-handler/.aws-sam/build",
+    "build:ig": "sam build --template-file image-generator/template.yaml --build-dir image-generator/.aws-sam/build",
+    "validate:rh": "sam validate --template-file request-handler/template.yaml",
+    "validate:ig": "sam validate --template-file image-generator/template.yaml",
+    "deploy:rh": "sam deploy --template-file request-handler/template.yaml --region eu-central-1",
+    "deploy:ig": "sam deploy --template-file image-generator/template.yaml --region us-west-2",
+    "build:lambda": "node ./request-handler/functions/build.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JairJosafath/HalfJourney-v2.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JairJosafath/HalfJourney-v2/issues"
+  },
+  "homepage": "https://github.com/JairJosafath/HalfJourney-v2#readme",
+  "dependencies": {
+    "@aws-sdk/client-sfn": "^3.501.0",
+    "@types/aws-lambda": "^8.10.132",
+    "esbuild": "^0.19.12",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.7"
+  }
+}

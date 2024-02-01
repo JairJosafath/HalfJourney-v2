@@ -1,0 +1,136 @@
+{
+  "Comment": "HalfJourney request handler State Machine",
+  "StartAt": "Choice",
+  "States": {
+    "Choice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.enhanced",
+          "BooleanEquals": true,
+          "Next": "TitanPromptEnhancer"
+        }
+      ],
+      "Default": "SavePrompt"
+    },
+    "SavePrompt": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "${HalfJourneyTableName}",
+        "Item": {
+          "userId": {
+            "S.$": "$.userId"
+          },
+          "interactionId": {
+            "S.$": "$.interactionId"
+          },
+          "prompt": {
+            "S.$": "$.prompt"
+          },
+          "enhanced": {
+            "BOOL.$": "$.enhanced"
+          },
+          "username": {
+            "S.$": "$.username"
+          },
+          "interactionToken": {
+            "S.$": "$.interactionToken"
+          },
+          "key": {
+            "S.$": "$.key"
+          }
+        }
+      },
+      "Next": "InvokeAPIGATEWAY",
+      "ResultPath": "$.result"
+    },
+    "InvokeAPIGATEWAY": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::apigateway:invoke",
+      "Parameters": {
+        "ApiEndpoint": "${API-ig-Endpoint}",
+        "Method": "POST",
+        "Stage": "dev",
+        "Path": "/",
+        "RequestBody": {
+          "prompt.$": "$.prompt",
+          "params.$": "$.params",
+          "key.$": "$.key",
+          "interactionUrl.$":"$.interactionUrl",
+          "userId.$": "$.userId"
+        },
+        "AuthType": "IAM_ROLE"
+      },
+      "End": true
+    },
+    "TitanPromptEnhancer": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::bedrock:invokeModel",
+      "Parameters": {
+        "ModelId": "${TitanModelArn}",
+        "Body": {
+          "inputText.$": 
+          "States.Format('you are a skilled prompt engineer. you will enhance the following prompt for a generative ai bot. the prompt is max 20 words long.\n Your response is only the enhanced prompt.\n===\nprompt: {}.\n\nInstructions: Please enhance the given prompt by providing detailed visual descriptions of the elements mentioned. Focus on describing appearances, settings, and actions in a vivid and detailed manner without creating a narrative or story.', $.prompt)",
+          "textGenerationConfig": {
+            "temperature": 0,
+            "topP": 1,
+            "maxTokenCount": 30
+          }
+        }
+      },
+      "Next": "SavePromptEnhanced",
+      "ResultSelector": {
+        "prompt.$": "$.Body.results[0].outputText"
+      },
+      "ResultPath": "$.input"
+    },
+    "SavePromptEnhanced": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Parameters": {
+        "TableName": "${HalfJourneyTableName}",
+        "Item": {
+          "userId": {
+            "S.$": "$.userId"
+          },
+          "interactionId": {
+            "S.$": "$.interactionId"
+          },
+          "prompt": {
+            "S.$": "$.prompt"
+          },
+          "enhanced": {
+            "BOOL.$": "$.enhanced"
+          },
+          "enhancedPrompt": {
+            "S.$": "$.input.prompt"
+          },
+          "username": {
+            "S.$": "$.username"
+          },
+          "interactionToken": {
+            "S.$": "$.interactionToken"
+          },
+          "key": {
+            "S.$": "$.key"
+          }
+        }
+      },
+      "Next": "Transform",
+      "ResultPath": "$.result"
+    },
+    "Transform": {
+      "Type": "Pass",
+      "Comment": "the input has prompt and enhanced prompt, this transformer changes the input for the next state to prompt",
+      "Next": "InvokeAPIGATEWAY",
+      "Parameters": {
+        "prompt.$": "$.input.prompt",
+        "key.$": "$.key",
+        "interactionUrl.$":"$.interactionUrl",
+        "params.$": "$.params",
+        "userId.$": "$.userId"
+      }
+    }
+  }
+}

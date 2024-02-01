@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  HalfJourney-sam
+
+  Sample SAM Template for HalfJourney-sam image-generator
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  GenerateImageStateMachine:
+    Type: AWS::Serverless::StateMachine # More info about State Machine Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-statemachine.html
+    Properties:
+      DefinitionUri: statemachine/generate_image.asl.json
+      DefinitionSubstitutions:
+        StableModelArn: "{{resolve:ssm:/HalfJourney/StableModelArn:1}}"
+        HalfJourneyBucket: !Ref HalfJourneyBucket
+        ConnectionArn: "{{resolve:ssm:/HalfJourney/ConnectionArn:1}}"
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action: bedrock:InvokeModel
+            Resource: "*"
+        - Statement:
+            Effect: Allow
+            Action: s3:PutObject
+            Resource: !Sub "arn:aws:s3:::${HalfJourneyBucket}/*"
+        - Statement:
+            Effect: Allow
+            Action: states:InvokeHTTPEndpoint
+            Resource: "*"
+        - Statement:
+            Effect: Allow
+            Action: 
+              - secretsmanager:GetSecretValue
+              - secretsmanager:DescribeSecret
+              - events:RetrieveConnectionCredentials
+            Resource: "*"
+
+  GenerateImageApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: dev
+      DefinitionBody:
+        swagger: "2.0"
+        basePath: "/dev"
+        schemes:
+        - "https"
+        paths:
+          /:
+            post:
+              consumes:
+              - "application/json"
+              produces:
+              - "application/json"
+              responses:
+                "200":
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                "400":
+                  description: "400 response"
+              x-amazon-apigateway-integration:
+                type: "aws"
+                credentials: !GetAtt ApiIntegrationRole.Arn
+                httpMethod: "POST"
+                uri: "arn:aws:apigateway:us-west-2:states:action/StartExecution"
+                responses:
+                  default:
+                    statusCode: "200"
+                requestTemplates:
+                  application/json: !Sub |
+                    {
+                      "input": "$util.escapeJavaScript($input.json('$'))",
+                      "stateMachineArn": "${GenerateImageStateMachine}"
+                    }
+                passthroughBehavior: "when_no_match"
+        definitions:
+          Empty:
+            type: "object"
+            title: "Empty Schema"
+  
+  ApiIntegrationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: ApiIntegrationPolicyHalfJourneysam
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: InvokeStateMachineUSWEST
+                Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !Ref GenerateImageStateMachine
+
+  HalfJourneyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+  MyBucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket:
+        Ref: "HalfJourneyBucket"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${HalfJourneyBucket}/*"
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/resources.html
+  GenerateImageApiEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for GenerateImageApi function"
+    Value: !Sub "https://${GenerateImageApi}.execute-api.${AWS::Region}.amazonaws.com/dev/"

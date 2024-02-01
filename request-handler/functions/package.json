@@ -1,0 +1,8 @@
+{
+    "scripts": {
+        "build": "esbuild index.ts --bundle --minify --sourcemap --platform=node --target=es2020 --outfile=dist/index.mjs --packages=external "
+    },
+    "dependencies": {
+        "tweetnacl": "^1.0.3"
+    }
+}

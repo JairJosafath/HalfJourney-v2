@@ -1,0 +1,61 @@
+{
+    "Comment": "This state machine generates an image using the Bedrock API",
+    "StartAt": "GenerateImage",
+    "States": {
+      "GenerateImage": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::bedrock:invokeModel",
+        "Parameters": {
+          "ModelId": "${StableModelArn}",
+          "Body": {
+            "height.$": "$.params.height",
+            "width.$": "$.params.width",
+            "text_prompts": [
+              {
+                "text.$": "$.prompt",
+                "weight": 0.5
+              }
+            ],
+            "cfg_scale.$": "$.params.cfgScale",
+            "sampler.$": "$.params.sampler",
+            "samples": 1,
+            "steps.$": "$.params.steps",
+            "style_preset.$": "$.params.style"
+          },
+          "Output": {
+            "S3Uri.$": "States.Format('s3://${HalfJourneyBucket}/{}',$.key)"
+          },
+          "Accept": "image/png",
+          "ContentType": "application/json"
+        },
+        "Next": "NotifyUser",
+        "ResultPath": "$.result"
+      },
+      "NotifyUser": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::http:invoke",
+        "Parameters": {
+          "ApiEndpoint.$": "$.interactionUrl",
+          "Authentication": {
+            "ConnectionArn": "${ConnectionArn}"
+          },
+          "Method": "POST",
+          "RequestBody": {
+            "content.$": "States.Format('hey there! here is your AWSome image!\n<@{}>\n\nhttps://${HalfJourneyBucket}.s3.us-west-2.amazonaws.com/{}',$.userId,$.key)"
+          }
+        },
+        "Retry": [
+          {
+            "ErrorEquals": [
+              "States.ALL"
+            ],
+            "BackoffRate": 2,
+            "IntervalSeconds": 1,
+            "MaxAttempts": 3,
+            "JitterStrategy": "FULL"
+          }
+        ],
+        "End": true
+      }
+    }
+  }
