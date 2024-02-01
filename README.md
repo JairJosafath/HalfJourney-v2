@@ -1,7 +1,7 @@
 ﻿# HalfJourney v2 (re:invented)
 
 HalfJourney is a generative ai enabled bot on discord, powered by AWS. \
-HalfJourney v1 solution is still on this repository: [www.github.com/JairJosafath/HalfJourney-v2.com](https://github.com/JairJosafath/HalfJourney-v1) \
+HalfJourney v1 solution is still on this repository: [www.github.com/JairJosafath/HalfJourney-v1.com](https://github.com/JairJosafath/HalfJourney-v1) \
 
 ## Why v2?
 After re:invent 2023, I decided to upgrade the solution based on the new services and functionalities \
